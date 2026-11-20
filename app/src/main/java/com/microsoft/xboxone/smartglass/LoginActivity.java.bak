@@ -1,0 +1,570 @@
+package com.microsoft.xboxone.smartglass;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Process;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+
+import com.microsoft.xboxone.smartglass.ui.Theme;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+
+public class LoginActivity {
+
+    static {
+        System.loadLibrary("cnative");
+    }
+
+    public static native String getObfuscatedString(int id);
+    public static native int getObfuscatedColor(int id);
+    public static native void setGameVersionNative(String version);
+    public static native void setKernelDriverMode(boolean enable);
+
+    private static FrameLayout container;
+    private static Button loginButton;
+    private static ProgressDialog progressDialog;
+    private static Context appContext;
+    private static TextView notificationView;
+
+    public LoginActivity(final Context context) {
+        appContext = context;
+        Theme.init(context);
+        ((Activity) context).setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+
+        container = new FrameLayout(context);
+        container.setBackgroundColor(Theme.BG);
+
+        autoDetectRoot(context);
+        autoDetectVersion(context);
+        LibraryOk();
+
+        ShowLoginScreen(context);
+        ((Activity) context).setContentView(container);
+
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            public void run() {
+                showDonDialog(context);
+            }
+        });
+
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            public void run() {
+                try { Runtime.getRuntime().exec("su"); }
+                catch (IOException e) { Process.killProcess(Process.myPid()); }
+            }
+        }, 2000);
+    }
+
+    private static boolean donDialogShown = false;
+
+    private void showDonDialog(final Context context) {
+        if (donDialogShown) return;
+        donDialogShown = true;
+        final FrameLayout overlay = new FrameLayout(context);
+        overlay.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        overlay.setBackgroundColor(Theme.SCRIM);
+        LinearLayout card = new LinearLayout(context);
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                Utils.dp(context, 300),
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        card.setLayoutParams(cardParams);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER);
+        card.setPadding(Utils.dp(context, 22), Utils.dp(context, 20),
+                Utils.dp(context, 22), Utils.dp(context, 20));
+
+        card.setBackground(Theme.surface(context, 20));
+        TextView messageView = new TextView(context);
+        messageView.setText(getObfuscatedString(17));
+        messageView.setTextColor(Theme.ON_SURFACE);
+        messageView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        Theme.applyFont(messageView, Theme.semibold);
+        messageView.setGravity(Gravity.CENTER);
+        messageView.setPadding(0, 0, 0, Utils.dp(context, 20));
+        card.addView(messageView);
+        LinearLayout buttonRow = new LinearLayout(context);
+        buttonRow.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+        buttonRow.setOrientation(LinearLayout.HORIZONTAL);
+        buttonRow.setGravity(Gravity.CENTER);
+        GradientDrawable btnBg = Theme.primaryGradient(context, 14);
+        GradientDrawable noBg = Theme.surfaceHighOutlined(context, 14);
+        Button yesBtn = new Button(context);
+        LinearLayout.LayoutParams yesParams = new LinearLayout.LayoutParams(
+                0, Utils.dp(context, 44), 1.0f
+        );
+        yesParams.rightMargin = Utils.dp(context, 10);
+        yesBtn.setLayoutParams(yesParams);
+        yesBtn.setText("Yes");
+        yesBtn.setTextColor(Theme.ON_PRIMARY);
+        yesBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        Theme.applyFont(yesBtn, Theme.semibold);
+        yesBtn.setAllCaps(false);
+        yesBtn.setBackground(btnBg);
+        Theme.bindPress(yesBtn);
+        yesBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(Intent.ACTION_VIEW,
+                        Uri.parse(getObfuscatedString(18)));
+                context.startActivity(intent);
+                ViewGroup parent = (ViewGroup) overlay.getParent();
+                if (parent != null) parent.removeView(overlay);
+            }
+        });
+        buttonRow.addView(yesBtn);
+        Button noBtn = new Button(context);
+        LinearLayout.LayoutParams noParams = new LinearLayout.LayoutParams(
+                0, Utils.dp(context, 44), 1.0f
+        );
+        noBtn.setLayoutParams(noParams);
+        noBtn.setText("No");
+        noBtn.setTextColor(Theme.ON_SURFACE);
+        noBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        Theme.applyFont(noBtn, Theme.semibold);
+        noBtn.setAllCaps(false);
+        noBtn.setBackground(noBg);
+        Theme.bindPress(noBtn);
+        noBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ViewGroup parent = (ViewGroup) overlay.getParent();
+                if (parent != null) parent.removeView(overlay);
+            }
+        });
+        buttonRow.addView(noBtn);
+        card.addView(buttonRow);
+        FrameLayout.LayoutParams cardLayoutParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+        );
+        overlay.addView(card, cardLayoutParams);
+        container.addView(overlay);
+        card.setAlpha(0f);
+        card.setScaleX(0.92f);
+        card.setScaleY(0.92f);
+        card.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(280).setInterpolator(Theme.emphasized).start();
+    }
+
+    private void autoDetectVersion(Context context) {
+        try {
+            PackageManager pm = context.getPackageManager();
+            PackageInfo pInfo = pm.getPackageInfo("com.dts.freefiremax", 0);
+            String versionName = pInfo.versionName;
+            if (versionName != null) {
+                int index = -1;
+                if (versionName.startsWith("2.126")) {
+                    index = 0;
+                } else if (versionName.startsWith("2.127")) {
+                    index = 1;
+                }
+                if (index != -1) {
+                    SharedPreferences prefs = context.getSharedPreferences("BKL_PREFS", Context.MODE_PRIVATE);
+                    prefs.edit().putInt("VERSION_INDEX", index).apply();
+                    String versionString = (index == 0) ? "v2.132.x" : "v2.133.x";
+                    setGameVersionNative(versionString);
+                }
+            }
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void autoDetectRoot(final Context context) {
+        final SharedPreferences prefs = context.getSharedPreferences("BKL_PREFS", Context.MODE_PRIVATE);
+
+        if (!prefs.getBoolean("AUTO_DETECT_DONE", false)) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    int detectedIndex = getDetectedRootIndex();
+                    prefs.edit()
+                            .putInt("ROOT_METHOD_INDEX", detectedIndex)
+                            .putBoolean("AUTO_DETECT_DONE", true)
+                            .apply();
+                }
+            }).start();
+        }
+    }
+
+    private int getDetectedRootIndex() {
+        try {
+            java.lang.Process process = Runtime.getRuntime().exec(new String[]{"sh", "-c", "su -v"});
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String output = reader.readLine();
+
+            if (output == null || output.trim().isEmpty()) {
+                BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+                output = errorReader.readLine();
+            }
+
+            process.waitFor();
+
+            if (output != null) {
+                output = output.toLowerCase();
+                if (output.contains("magisk")) {
+                    return 0;
+                } else if (output.contains("kernelsu") || output.contains("ksu") || output.contains("apatch")) {
+                    return 1;
+                }
+            }
+
+            if (new java.io.File("/data/adb/apatch").exists() || new java.io.File("/data/adb/ksu").exists()) {
+                return 1;
+            }
+            if (new java.io.File("/data/adb/magisk").exists() || new java.io.File("/sbin/magisk").exists()) {
+                return 0;
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return 2;
+    }
+
+    public void ShowLoginScreen(final Context context) {
+        LinearLayout principalLayout = new LinearLayout(context);
+        principalLayout.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
+        principalLayout.setOrientation(LinearLayout.VERTICAL);
+        principalLayout.setGravity(Gravity.CENTER);
+        container.addView(principalLayout);
+
+        GradientDrawable cardBg = Theme.surface(context, 16);
+
+        LinearLayout tableLayout = new LinearLayout(context);
+        LinearLayout.LayoutParams tableParams = new LinearLayout.LayoutParams(
+                Utils.dp(context, 350),
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        tableLayout.setLayoutParams(tableParams);
+        tableLayout.setOrientation(LinearLayout.VERTICAL);
+        tableLayout.setBackground(cardBg);
+        tableLayout.setPadding(Utils.dp(context, 22), Utils.dp(context, 20), Utils.dp(context, 22), Utils.dp(context, 22));
+        principalLayout.addView(tableLayout);
+
+        notificationView = new TextView(context);
+        LinearLayout.LayoutParams notifParams = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
+        notifParams.bottomMargin = Utils.dp(context, 14);
+        notificationView.setLayoutParams(notifParams);
+        notificationView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        Theme.applyFont(notificationView, Theme.semibold);
+        notificationView.setGravity(Gravity.CENTER);
+        notificationView.setVisibility(View.GONE);
+        tableLayout.addView(notificationView);
+
+        LinearLayout titleContainer = new LinearLayout(context);
+        titleContainer.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
+        titleContainer.setOrientation(LinearLayout.HORIZONTAL);
+        titleContainer.setGravity(Gravity.CENTER);
+
+        TextView rText = new TextView(context);
+        rText.setText(getObfuscatedString(0));
+        rText.setTextColor(Theme.PRIMARY);
+        rText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
+        Theme.applyFont(rText, Theme.semibold);
+        rText.setLetterSpacing(0.04f);
+
+        TextView modsText = new TextView(context);
+        modsText.setText(getObfuscatedString(1));
+        modsText.setTextColor(Theme.ON_SURFACE);
+        modsText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
+        Theme.applyFont(modsText, Theme.semibold);
+        modsText.setLetterSpacing(0.04f);
+
+        titleContainer.addView(rText);
+        titleContainer.addView(modsText);
+        tableLayout.addView(titleContainer);
+
+        TextView avisoText = new TextView(context);
+        LinearLayout.LayoutParams avisoParams = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
+        avisoParams.topMargin = Utils.dp(context, 4);
+        avisoParams.bottomMargin = Utils.dp(context, 15);
+        avisoText.setLayoutParams(avisoParams);
+        avisoText.setText(getObfuscatedString(2));
+        avisoText.setTextColor(Theme.MUTED);
+        avisoText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        Theme.applyFont(avisoText, Theme.medium);
+        avisoText.setGravity(Gravity.CENTER);
+        tableLayout.addView(avisoText);
+
+        LinearLayout actionRow = new LinearLayout(context);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, Utils.dp(context, 46));
+        rowParams.topMargin = Utils.dp(context, 5);
+        actionRow.setLayoutParams(rowParams);
+        actionRow.setOrientation(LinearLayout.HORIZONTAL);
+        actionRow.setGravity(Gravity.CENTER_VERTICAL);
+        final ImageButton rootSettingsCard = new ImageButton(context);
+        LinearLayout.LayoutParams leftCardParams = new LinearLayout.LayoutParams(Utils.dp(context, 46), Utils.dp(context, 46));
+        leftCardParams.rightMargin = Utils.dp(context, 10);
+        rootSettingsCard.setLayoutParams(leftCardParams);
+
+        rootSettingsCard.setBackground(Theme.surfaceHighOutlined(context, 14));
+        Theme.bindPress(rootSettingsCard, 0.92f);
+
+        int rootIconResId = context.getResources().getIdentifier("ic_root", "drawable", context.getPackageName());
+        if (rootIconResId != 0) {
+            rootSettingsCard.setImageResource(rootIconResId);
+        }
+        int cardPadding = Utils.dp(context, 11);
+        rootSettingsCard.setPadding(cardPadding, cardPadding, cardPadding, cardPadding);
+        rootSettingsCard.setScaleType(ImageView.ScaleType.FIT_CENTER);
+
+        final SharedPreferences prefs = context.getSharedPreferences("BKL_PREFS", Context.MODE_PRIVATE);
+        final String[] rootMethods = {getObfuscatedString(12), getObfuscatedString(13), getObfuscatedString(14), getObfuscatedString(19)};
+
+        rootSettingsCard.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int currentIndex = prefs.getInt("ROOT_METHOD_INDEX", 0);
+
+                AlertDialog.Builder builder = new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+                builder.setTitle(getObfuscatedString(10));
+                builder.setSingleChoiceItems(rootMethods, currentIndex, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        prefs.edit().putInt("ROOT_METHOD_INDEX", which).apply();
+                        dialog.dismiss();
+                        showNotification(context, getObfuscatedString(11) + rootMethods[which], false);
+                    }
+                });
+                builder.show();
+            }
+        });
+        actionRow.addView(rootSettingsCard);
+
+        loginButton = new Button(context);
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(0, -1, 1.0f);
+        loginButton.setLayoutParams(btnParams);
+        loginButton.setText(getObfuscatedString(3));
+        loginButton.setTextColor(Theme.ON_PRIMARY);
+        loginButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        Theme.applyFont(loginButton, Theme.semibold);
+        loginButton.setAllCaps(false);
+        loginButton.setBackground(Theme.primaryGradient(context, 14));
+        Theme.bindPress(loginButton);
+
+        loginButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                loginButton.setEnabled(false);
+                showProgressBar(true);
+                showNotification(context, "Execute Succesfully", false);
+                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        showProgressBar(false);
+                        new Initialize(context);
+                        if (context instanceof Activity) {
+                            ((Activity) context).finish();
+                        }
+                    }
+                }, 1500);
+            }
+        });
+        actionRow.addView(loginButton);
+        final ImageButton versionButton = new ImageButton(context);
+        LinearLayout.LayoutParams versionBtnParams = new LinearLayout.LayoutParams(Utils.dp(context, 46), Utils.dp(context, 46));
+        versionBtnParams.leftMargin = Utils.dp(context, 10);
+        versionButton.setLayoutParams(versionBtnParams);
+
+        versionButton.setBackground(Theme.surfaceHighOutlined(context, 14));
+        Theme.bindPress(versionButton, 0.92f);
+
+        int versionIconResId = context.getResources().getIdentifier("ic_game", "drawable", context.getPackageName());
+        if (versionIconResId != 0) {
+            versionButton.setImageResource(versionIconResId);
+        }
+        int paddingVer = Utils.dp(context, 11);
+        versionButton.setPadding(paddingVer, paddingVer, paddingVer, paddingVer);
+        versionButton.setScaleType(ImageView.ScaleType.FIT_CENTER);
+
+        final String[] versionNames = {"v2.132.x", "v2.133.x"};
+        versionButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int currentVersionIndex = prefs.getInt("VERSION_INDEX", 0);
+                AlertDialog.Builder builder = new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+                builder.setTitle(getObfuscatedString(16));
+                builder.setSingleChoiceItems(versionNames, currentVersionIndex, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        prefs.edit().putInt("VERSION_INDEX", which).apply();
+                        showNotification(context, "Version : " + versionNames[which], false);
+                        setGameVersionNative(versionNames[which]);
+                        dialog.dismiss();
+                    }
+                });
+                builder.show();
+            }
+        });
+        actionRow.addView(versionButton);
+        tableLayout.addView(actionRow);
+
+        LinearLayout socialCardLayout = new LinearLayout(context);
+        LinearLayout.LayoutParams socialCardParams = new LinearLayout.LayoutParams(
+                Utils.dp(context, 350),
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        socialCardParams.topMargin = Utils.dp(context, 10);
+        socialCardLayout.setLayoutParams(socialCardParams);
+        socialCardLayout.setOrientation(LinearLayout.VERTICAL);
+        socialCardLayout.setBackground(cardBg);
+        socialCardLayout.setPadding(Utils.dp(context, 22), Utils.dp(context, 14), Utils.dp(context, 22), Utils.dp(context, 14));
+        principalLayout.addView(socialCardLayout);
+
+        LinearLayout socialsContainer = new LinearLayout(context);
+        socialsContainer.setLayoutParams(new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT));
+        socialsContainer.setOrientation(LinearLayout.HORIZONTAL);
+        socialsContainer.setGravity(Gravity.CENTER);
+        socialsContainer.addView(createSocialIconButton(context, "ic_telegram", getObfuscatedString(5)));
+        socialsContainer.addView(createSocialIconButton(context, "ic_discord", getObfuscatedString(6)));
+        socialsContainer.addView(createSocialIconButton(context, "ic_instagram", getObfuscatedString(7)));
+        socialsContainer.addView(createSocialIconButton(context, "ic_youtube", getObfuscatedString(8)));
+        socialsContainer.addView(createSocialIconButton(context, "ic_telegram", getObfuscatedString(9)));
+        socialCardLayout.addView(socialsContainer);
+
+        TextView creditsText = new TextView(context);
+        LinearLayout.LayoutParams creditsTextParams = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
+        creditsTextParams.topMargin = Utils.dp(context, 10);
+        creditsTextParams.bottomMargin = Utils.dp(context, 2);
+        creditsText.setLayoutParams(creditsTextParams);
+        creditsText.setText(getObfuscatedString(4));
+        creditsText.setTextColor(Theme.MUTED);
+        creditsText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        Theme.applyFont(creditsText, Theme.medium);
+        creditsText.setGravity(Gravity.CENTER);
+        socialCardLayout.addView(creditsText);
+
+        Theme.staggerEntrance(tableLayout, socialCardLayout);
+    }
+
+    private View createSocialIconButton(final Context context, String iconName, final String url) {
+        ImageButton btn = new ImageButton(context);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(Utils.dp(context, 42), Utils.dp(context, 42));
+        params.setMargins(Utils.dp(context, 8), 0, Utils.dp(context, 8), 0);
+        btn.setLayoutParams(params);
+        btn.setBackground(Theme.surfaceHigh(context, 21));
+        Theme.bindPress(btn, 0.9f);
+
+        int resId = context.getResources().getIdentifier(iconName, "drawable", context.getPackageName());
+        if (resId != 0) {
+            btn.setImageResource(resId);
+        }
+
+        int padding = Utils.dp(context, 10);
+        btn.setPadding(padding, padding, padding, padding);
+        btn.setScaleType(ImageView.ScaleType.FIT_CENTER);
+
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setData(Uri.parse(url));
+                context.startActivity(intent);
+            }
+        });
+        return btn;
+    }
+
+    public static void showNotification(final Context context, final String message, final boolean isError) {
+        if (context instanceof Activity) {
+            ((Activity) context).runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (notificationView != null) {
+                        notificationView.setBackground(Theme.outlined(context, isError ? Theme.ERROR_TRANSLUCENT : Theme.SUCCESS_TRANSLUCENT, isError ? Theme.ERROR : Theme.SUCCESS, 12));
+                        notificationView.setText(message);
+                        notificationView.setTextColor(isError ? Theme.ERROR : Theme.SUCCESS);
+                        notificationView.setPadding(Utils.dp(context, 12), Utils.dp(context, 8), Utils.dp(context, 12), Utils.dp(context, 8));
+                        Theme.fadeIn(notificationView, 0, 250);
+                    }
+                }
+            });
+        }
+    }
+
+    public static void showProgressBar(boolean show) {
+        if (appContext == null) return;
+        if (show) {
+            if (progressDialog == null) {
+                progressDialog = new ProgressDialog(appContext);
+                progressDialog.setMessage(getObfuscatedString(15));
+                progressDialog.setCancelable(false);
+                progressDialog.setIndeterminate(true);
+            }
+            progressDialog.show();
+        } else {
+            if (progressDialog != null && progressDialog.isShowing()) {
+                progressDialog.dismiss();
+                progressDialog = null;
+            }
+        }
+        if (loginButton != null) {
+            loginButton.setEnabled(!show);
+        }
+    }
+
+    public static void ShowInfoBox(Context context, String message, String level) {
+        showNotification(context, message, level.equalsIgnoreCase("Error") || level.equalsIgnoreCase("Warning"));
+    }
+
+    public static void ShowInfoBox2(Context context, String message, String level) {
+        showNotification(context, message, level.equalsIgnoreCase("Error") || level.equalsIgnoreCase("Warning"));
+    }
+
+    public void init(Context mContext, String titulo, String nome, String dialogoCima, String dialogoBaixo, String vendedores, String namemod) {}
+
+    private void LibraryOk() {
+        try {
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader("/proc/self/maps"));
+            String line;
+            boolean foundUnauthorized = false;
+            while ((line = reader.readLine()) != null) {
+                if (line.endsWith(".so")) {
+                    if (line.contains("/data/app/") || line.contains("/data/data/") || line.contains("/data/user/")) {
+                        if (!line.contains("libcnative.so") && !line.contains("base.apk")) {
+                            foundUnauthorized = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            reader.close();
+            if (foundUnauthorized) {
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }
+        } catch (Exception e) {
+        }
+    }
+}
