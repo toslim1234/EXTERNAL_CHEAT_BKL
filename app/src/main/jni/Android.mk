@@ -53,7 +53,9 @@ include $(BUILD_SHARED_LIBRARY)
 # a memory backend (driver node / KPM / /proc/<pid>/mem) and never injects.
 include $(CLEAR_VARS)
 LOCAL_MODULE    := bklkilld
-LOCAL_MODULE_FILENAME := libbklkilld.so
+# ndk-build forbids an extension on LOCAL_MODULE_FILENAME for executables.
+# Gradle stages this binary into jniLibs as libbklkilld.so before packaging.
+LOCAL_MODULE_FILENAME := libbklkilld
 LOCAL_SRC_FILES := \
     src/Server.cpp \
     src/Socket/server.cpp \
@@ -76,7 +78,7 @@ include $(BUILD_EXECUTABLE)
 # extracts it to its private cache and runs it through `su`, then deletes it again.
 include $(CLEAR_VARS)
 LOCAL_MODULE    := bkliject
-LOCAL_MODULE_FILENAME := libbkliject.so
+LOCAL_MODULE_FILENAME := libbkliject
 LOCAL_SRC_FILES := src/Injector.cpp
 LOCAL_CPPFLAGS  := -fvisibility=hidden -DNDEBUG -std=c++17 -Os -fdata-sections -ffunction-sections
 LOCAL_CFLAGS    := -Wno-error=format-security -fpermissive -fvisibility=hidden -DNDEBUG -Os

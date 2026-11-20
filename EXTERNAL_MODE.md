@@ -207,6 +207,13 @@ Build split (`jni/Android.mk`):
 | `bklkill` | payload + game logic | `BKL_PAYLOAD` | Injected fallback |
 | `cnative` | `Client.cpp`, widgets | — | App-side UI/JNI |
 
+`bklkilld` and `bkliject` are `BUILD_EXECUTABLE` modules. ndk-build rejects a
+file extension on `LOCAL_MODULE_FILENAME`, so their filenames are extensionless
+(`libbklkilld`, `libbkliject`). The `stageRootExecutables` Gradle task copies the
+linked binaries into `build/generated/jniLibs/arm64-v8a/` with `.so` names before
+`merge*JniLibFolders`, because Android only extracts `lib/<abi>/*.so` from an
+APK. `Initialize.java` therefore still extracts `lib/arm64-v8a/libbklkilld.so`.
+
 The payload build deliberately excludes `src/External/*` so the injected image
 stays small; the daemon build excludes the widget/ESP code it can never use.
 

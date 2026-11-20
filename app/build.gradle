@@ -47,6 +47,52 @@ android {
     }
 
     ndkVersion '24.0.8215888' // Ajuste conforme necessário
+
+    // Root helpers are built as ELF executables by ndk-build (extensionless
+    // output) and staged into this directory with .so names below, because
+    // Android only extracts lib/<abi>/*.so entries from an APK.
+    sourceSets {
+        main {
+            jniLibs.srcDir file("$buildDir/generated/jniLibs")
+        }
+    }
+}
+
+// ndk-build refuses a file extension on LOCAL_MODULE_FILENAME for
+// BUILD_EXECUTABLE, but the app extracts libbklkilld.so / libbkliject.so from
+// the APK. Copy the linked binaries into jniLibs under those names so AGP
+// packages and installs them normally.
+tasks.register('stageRootExecutables') {
+    description = 'Stage root executables into jniLibs with .so names'
+    dependsOn 'externalNativeBuildDebug'
+    doLast {
+        def outDir = file("$buildDir/generated/jniLibs/arm64-v8a")
+        outDir.mkdirs()
+        ['Debug', 'Release'].each { cfg ->
+            def root = file("$buildDir/intermediates/cxx/$cfg")
+            if (!root.exists()) return
+            fileTree(root).matching {
+                include '**/lib/arm64-v8a/libbklkilld'
+                include '**/lib/arm64-v8a/libbkliject'
+            }.each { binary ->
+                copy {
+                    from binary
+                    into outDir
+                    rename { binary.name + '.so' }
+                }
+            }
+        }
+        if (!file("$outDir/libbklkilld.so").exists()) {
+            throw new GradleException('bklkilld executable was not staged; check ndk-build output')
+        }
+    }
+}
+
+tasks.matching {
+    it.name in ['mergeDebugJniLibFolders', 'mergeReleaseJniLibFolders',
+                'packageDebug', 'packageRelease']
+}.configureEach {
+    dependsOn 'stageRootExecutables'
 }
 
 dependencies {
